@@ -5,6 +5,7 @@ using System.Text;
 using Deepleo.Weixin.SDK.Helpers;
 using Codeplex.Data;
 using System.Net.Http;
+using System.IO;
 
 namespace Deepleo.Weixin.SDK.Card
 {
@@ -23,12 +24,10 @@ namespace Deepleo.Weixin.SDK.Card
         /// <param name="access_token"></param>
         /// <param name="file"></param>
         /// <returns>返回上传后路径</returns>
-        public static string UploadLogo(string access_token, string file)
+        public static string UploadLogo(string access_token, string fileName, Stream inputStream)
         {
             var url = string.Format("http://api.weixin.qq.com/cgi-bin/uploadimg?access_token={0}", access_token);
-            var fileDictionary = new Dictionary<string, string>();
-            fileDictionary["buffer"] = file;
-            var returnMessage = DynamicJson.Parse(Util.HttpRequestPost(url, fileDictionary));
+            var returnMessage = DynamicJson.Parse(Util.HttpRequestPost(url, "buffer", fileName, inputStream));
             if (returnMessage.errcode != 0) return string.Empty;
             return returnMessage.url;
         }
@@ -81,7 +80,7 @@ namespace Deepleo.Weixin.SDK.Card
             var url = string.Format("https://api.weixin.qq.com/card/location/batchadd?access_token={0}", access_token);
             var client = new HttpClient();
             var result = client.PostAsync(url, new StringContent(DynamicJson.Serialize(location_list))).Result;
-            if (result.IsSuccessStatusCode) return null;
+            if (!result.IsSuccessStatusCode) return null;
             return DynamicJson.Parse(result.Content.ReadAsStringAsync().Result);
         }
         /// <summary>
@@ -126,7 +125,7 @@ namespace Deepleo.Weixin.SDK.Card
                 .Append('"' + "count" + '"' + ":").Append(count)
                 .Append("}");
             var result = client.PostAsync(url, new StringContent(sb.ToString())).Result;
-            if (result.IsSuccessStatusCode) return null;
+            if (!result.IsSuccessStatusCode) return null;
             return DynamicJson.Parse(result.Content.ReadAsStringAsync().Result);
         }
 
@@ -160,7 +159,7 @@ namespace Deepleo.Weixin.SDK.Card
             var url = string.Format("https://api.weixin.qq.com/card/getcolors?access_token={0}", access_token);
             var client = new HttpClient();
             var result = client.GetAsync(url).Result;
-            if (result.IsSuccessStatusCode) return null;
+            if (!result.IsSuccessStatusCode) return null;
             return DynamicJson.Parse(result.Content.ReadAsStringAsync().Result);
         }
 
@@ -223,7 +222,7 @@ namespace Deepleo.Weixin.SDK.Card
             var url = string.Format("https://api.weixin.qq.com/card/create?access_token={0}", access_token);
             var client = new HttpClient();
             var result = client.PostAsync(url, new StringContent(DynamicJson.Serialize(card))).Result;
-            if (result.IsSuccessStatusCode) return null;
+            if (!result.IsSuccessStatusCode) return null;
             return DynamicJson.Parse(result.Content.ReadAsStringAsync().Result);
         }
 

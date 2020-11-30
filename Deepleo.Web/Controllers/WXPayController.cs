@@ -10,81 +10,121 @@ using Deepleo.Web.Services;
 using Deepleo.Weixin.SDK.Pay;
 using System.IO;
 using Codeplex.Data;
+using Deepleo.Web.Attribute;
+using Deepleo.Web.Models;
+using System.Xml.Linq;
 
 namespace Deepleo.Web.Controllers
 {
+
     /// <summary>
     /// 微信支付
     /// </summary>
     public class WXPayController : Controller
     {
-        /// <summary>
-        /// 生成prepay_id
-        /// 
-        /// POST参数：
-        /// body(商品描述)
-        /// detail(商品详情)
-        /// total_fee(总金额,只能是整数，单位：分)
-        /// trade_type：APP，Native,JSAPI
-        /// goods_tag(商品标记):代金券或立减优惠功能的参数
-        /// product_id(商品ID):trade_type=NATIVE，此参数必传。此id为二维码中包含的商品ID，商户自行定义.
-        /// openid(用户标识):trade_type=JSAPI，此参数必传，用户在商户appid下的唯一标识。下单前需要调用【网页授权获取用户信息】接口获取到用户的Openid。 
-        /// </summary>
-        /// <returns></returns>
-        [HttpPost]
-        public JsonResult Index()
+        public ActionResult Index()
         {
-            var form = Request.Form;
-            var sPara = GetRequestPost(form);
-            if (sPara.Count <= 0)
+            try
             {
-                throw new ArgumentNullException();
-            }
-            LogWriter.Default.WriteInfo(form.ToString());//记录请求关键信息到日志中去
-            var out_trade_no = Guid.NewGuid().ToString();
-            var domain = System.Configuration.ConfigurationManager.AppSettings["Domain"];
-            var body = sPara["body"];
-            var detail = sPara["detail"];
-            var attach = sPara["attach"];
-            var fee_type = "CNY";
-            var total_fee = int.Parse(sPara["total_fee"]);
-            var trade_type = sPara["trade_type"];
-            var spbill_create_ip = (trade_type == "APP" || trade_type == "NATIVE") ? Request.UserHostName : WeixinConfig.spbill_create_ip;
-            var time_start = DateTime.Now.ToString("yyyyMMddHHmmss");
-            var time_expire = DateTime.Now.AddHours(1).ToString("yyyyMMddHHmmss");//默认1个小时订单过期，开发者可自定义其他超时机制，原则上微信订单超时时间不超过2小时
-            var goods_tag = sPara["goods_tag"];
-            var notify_url = string.Format("{0}/WXPay/Notify", domain);//与下面的Notify对应，开发者可自定义其他url地址
-            var product_id = sPara["product_id"];
-            var openid = sPara["openid"];
-            var partnerKey = WeixinConfig.PartnerKey;
-            var content = WxPayAPI.UnifiedOrder(
-                          WeixinConfig.AppID, WeixinConfig.mch_id, WeixinConfig.device_info, Util.CreateNonce_str(),
-                          body, detail, attach, out_trade_no, fee_type, total_fee, spbill_create_ip, time_start, time_expire,
-                          goods_tag, notify_url, trade_type, product_id, openid, partnerKey);
+                var out_trade_no = Guid.NewGuid().ToString("N");
+                var domain = System.Configuration.ConfigurationManager.AppSettings["Domain"];
+                var body = "商品描述";
+                var detail = "商品详情";
+                var attach = "";
+                var product_id = "1";
+                var openid = User.Identity.Name;
+                var goods_tag = "";
+                var fee_type = "CNY";
+                var total_fee = 10;
+                var trade_type = "JSAPI";
+                var appId = System.Configuration.ConfigurationManager.AppSettings["AppId"];
+                var nonceStr = Util.CreateNonce_str();
+                var timestamp = Util.CreateTimestamp();
+                var success_redict_url = string.Format("{0}/WxPay/Success", domain);
+                var url = domain + Request.Url.PathAndQuery;
+                var userAgent = Request.UserAgent;
+                var userVersion = userAgent.Substring(userAgent.LastIndexOf("MicroMessenger/") + 15, 3);//微信版本号高于或者等于5.0才支持微信支付
+                var spbill_create_ip = (trade_type == "APP" || trade_type == "NATIVE") ? Request.UserHostName : WeixinConfig.spbill_create_ip;
+                var time_start = DateTime.Now.ToString("yyyyMMddHHmmss");
+                var time_expire = DateTime.Now.AddHours(1).ToString("yyyyMMddHHmmss");//默认1个小时订单过期，开发者可自定义其他超时机制，原则上微信订单超时时间不超过2小时
 
-            if (content.return_code.Value == "SUCCESS" && content.result_code.Value == "SUCCESS")
-            {
-                var result = new
+                var notify_url = string.Format("{0}/WxPay/Notify", domain);//与下面的Notify对应，开发者可自定义其他url地址
+                var partnerKey = WeixinConfig.PartnerKey;
+                var mch_id = WeixinConfig.mch_id;
+                var device_info = WeixinConfig.device_info;
+                var returnXML = "";
+                var paramaterXml = "";
+                var content = WxPayAPI.UnifiedOrder(
+                              appId, mch_id, device_info, nonceStr,
+                              body, detail, attach, out_trade_no, fee_type, total_fee, spbill_create_ip, time_start, time_expire,
+                              goods_tag, notify_url, trade_type, product_id, openid, partnerKey, out returnXML, out paramaterXml);
+                LogWriter.Default.WriteError(paramaterXml);
+                LogWriter.Default.WriteError(returnXML);
+                var prepay_id = "";
+                var sign = "";
+                var return_code = "";
+                var return_msg = "";
+                var err_code = "";
+                var err_code_des = "";
+                var isUnifiedOrderSuccess = false;
+                if (content.return_code.Value == "SUCCESS" && content.result_code.Value == "SUCCESS")
                 {
-                    prepay_id = content.prepay_id.Value,
-                    trade_type = content.trade_type.Value,
-                    sign = content.sign.Value,
-                    nonce_str = content.nonce_str.Value,
-                    return_code = content.result_code.Value,
-                    return_msg = "",
-                };
-                return Json(result);
-            }
-            else
-            {
-                var result = new
+                    prepay_id = content.prepay_id.Value;
+                    sign = WxPayAPI.SignPay(appId, timestamp.ToString(), nonceStr, prepay_id, partnerKey);
+                    trade_type = content.trade_type.Value;
+                    isUnifiedOrderSuccess = true;
+                }
+                else
                 {
-                    return_code = content.return_code.Value,
-                    return_msg = content.return_msg.Value,
+                    return_code = content.return_code.Value;
+                    return_msg = content.return_msg.Value;
+                    isUnifiedOrderSuccess = false;
+                }
+                if (!isUnifiedOrderSuccess)
+                {
+                    return RedirectToAction("Failed", new { msg = "(代码:101)服务器下单失败，请重试" });
+                }
+                var model = new JSPayModel
+                {
+                    appId = appId,
+                    nonceStr = nonceStr,
+                    timestamp = timestamp,
+                    userAgent = userAgent,
+                    userVersion = userVersion,
+                    attach = "",
+                    body = body,
+                    detail = detail,
+                    openid = openid,
+                    product_id = out_trade_no,
+                    goods_tag = goods_tag,
+                    price = total_fee,
+                    total_fee = total_fee,
+                    prepay_id = prepay_id,
+                    trade_type = trade_type,
+                    sign = sign,
+                    return_code = return_code,
+                    return_msg = return_msg,
+                    err_code = err_code,
+                    err_code_des = err_code_des,
+                    success_redict_url = success_redict_url
                 };
-                return Json(result);
+                return View(model);
             }
+            catch (Exception ex)
+            {
+                LogWriter.Default.WriteError(ex.Message);
+                return RedirectToAction("Failed", new { msg = "(代码:200)" + ex.Message });
+            }
+        }
+        public ActionResult Success()
+        {
+            return View();
+        }
 
+        public ActionResult Failed(string msg)
+        {
+            ViewBag.msg = msg;
+            return View();
         }
 
         /// <summary>
@@ -100,61 +140,62 @@ namespace Deepleo.Web.Controllers
         /// 技术人员可登进微信商户后台扫描加入接口报警群。 
         /// </summary>
         /// <returns></returns>
-        [HttpPost]
+        [AllowAnonymous]
         public ActionResult Notify()
         {
-            var form = Request.QueryString;
-            var sPara = GetRequestPost(form);
+            var doc = XDocument.Load(Request.InputStream);
+            var sPara = doc.Root.Descendants().ToDictionary(x => x.Name.LocalName, x => x.Value);
             if (sPara.Count <= 0)
             {
                 throw new ArgumentNullException();
             }
-            LogWriter.Default.WriteInfo(form.ToString());//记录请求关键信息到日志中去
-            if (sPara["return_code"] == "SUCCESS" && sPara["return_code"] == "SUCCESS")
+
+            LogWriter.Default.WriteError("Notify Parameters:" + sPara.ToString());//记录请求关键信息到日志中去
+
+            if (sPara["return_code"] == "SUCCESS" && sPara["result_code"] == "SUCCESS")
             {
-                var sign_type = sPara["sign_type"];
                 var sign = sPara["sign"];
                 var signValue = WxPayAPI.Sign(sPara, WeixinConfig.PartnerKey);
                 bool isVerify = sign == signValue;
+                LogWriter.Default.WriteError("Verify:" + isVerify + "|sign/signValue:" + sign + "," + signValue);
                 if (isVerify)
                 {
-                    var out_trade_no = sPara["out_trade_no"];
+                    string out_trade_no = sPara["out_trade_no"];//商户订单ID： 1.注意交易单不要重复处理；2.注意判断返回金额
+                    string transaction_id = sPara["transaction_id"]; //微信支付订单号
+                    string time_end = sPara["time_end"];//支付完成时间
+                    int total_fee = int.Parse(sPara["total_fee"]); //总金额
+                    string bank_type = sPara["bank_type"]; //付款银行
 
+                    //****************************************************************************************
                     //TODO 商户处理订单逻辑： 1.注意交易单不要重复处理；2.注意判断返回金额
 
 
                     //TODO:postData中携带该次支付的用户相关信息，这将便于商家拿到openid，以便后续提供更好的售后服务，譬如：微信公众好通知用户付款成功。如果不提供服务则可以删除此代码
                     var openid = sPara["openid"];
-
-
-                    return Content("success");
+                    LogWriter.Default.WriteError("Notify Success, out_trade_no:" + out_trade_no + ",transaction_id" + transaction_id + ",time_end:" + time_end+ ",total_fee:"+ total_fee+ ",bank_type:"+ bank_type+ ",openid:"+ openid);
+                    return Content(string.Format("<xml><return_code><![CDATA[{0}]]></return_code><return_msg><![CDATA[{1}]]></return_msg></xml>", "SUCCESS", "OK"));
                 }
-                return Content("fail");
             }
-            else
-            {
-                return Content("fail");
-            }
+            return Content(string.Format("<xml><return_code><![CDATA[{0}]]></return_code></xml>", "FAIL"));
         }
 
+
         /// <summary>
-        /// 微信退款完成后的回调
+        /// 退款结果通知
+        /// https://pay.weixin.qq.com/wiki/doc/api/jsapi.php?chapter=9_16&index=9
         /// </summary>
         /// <returns></returns>
+        [AllowAnonymous]
         public ActionResult Refund()
         {
-            var requestContent = "";
-            using (StreamReader sr = new StreamReader(Request.InputStream))
-            {
-                requestContent = sr.ReadToEnd();
-            }
-            LogWriter.Default.WriteInfo(requestContent);//记录请求关键信息到日志中去
-            bool isVerify = false;
-            var sPara = GetRequestPostByXml(requestContent);
+            var doc = XDocument.Load(Request.InputStream);
+            var sPara = doc.Root.Descendants().ToDictionary(x => x.Name.LocalName, x => x.Value);
             if (sPara.Count <= 0)
             {
                 throw new ArgumentNullException();
             }
+            LogWriter.Default.WriteError("Refund Parameters:" + sPara.ToString());//记录请求关键信息到日志中去
+            bool isVerify = false;
             var sign = sPara["sign"];
             var retcode = sPara["retcode"];
             if (retcode != "0")
@@ -168,53 +209,14 @@ namespace Deepleo.Web.Controllers
             }
             if (!isVerify)
             {
-                return Content("fail");
+                return Content(string.Format("<xml><return_code><![CDATA[{0}]]></return_code></xml>", "FAIL"));
             }
             //TODO:商户处理订单逻辑
 
-            return Content("success");
+            //END 商户处理订单逻辑
+            string out_trade_no = sPara["out_trade_no"];//商户订单ID： 1.注意交易单不要重复处理；2.注意判断返回金额
 
-        }
-
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="xmlString"></param>
-        /// <returns></returns>
-        private Dictionary<string, string> GetRequestPostByXml(string xmlString)
-        {
-            Dictionary<string, string> dic = new Dictionary<string, string>();
-            System.Xml.XmlDocument document = new System.Xml.XmlDocument();
-            document.LoadXml(xmlString);
-
-            var nodes = document.ChildNodes[1].ChildNodes;
-
-            foreach (System.Xml.XmlNode item in nodes)
-            {
-                dic.Add(item.Name, item.InnerText);
-            }
-            return dic;
-        }
-
-        /// <summary>
-        /// 并以“参数名=参数值”的形式组成数组
-        /// </summary>
-        /// <returns>request回来的信息组成的数组</returns>
-        private SortedDictionary<string, string> GetRequestPost(NameValueCollection form)
-        {
-            int i = 0;
-            SortedDictionary<string, string> sArray = new SortedDictionary<string, string>();
-
-            // Get names of all forms into a string array.
-            String[] requestItem = form.AllKeys;
-
-            for (i = 0; i < requestItem.Length; i++)
-            {
-                sArray.Add(requestItem[i], HttpUtility.UrlDecode(form[requestItem[i]], Encoding.UTF8));
-            }
-
-            return sArray;
+            return Content(string.Format("<xml><return_code><![CDATA[{0}]]></return_code><return_msg><![CDATA[{1}]]></return_msg></xml>", "SUCCESS", "OK"));
         }
     }
 }

@@ -35,7 +35,9 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Data.Entity.Design" />
     <Reference Include="System.Net" />
-    <Reference Include="System.Net.Http, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL" />
+    <Reference Include="System.Net.Http">
+      <HintPath>..\packages\Microsoft.Net.Http.2.0.20710.0\lib\net40\System.Net.Http.dll</HintPath>
+    </Reference>
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.ServiceModel" />
     <Reference Include="System.ServiceModel.Web" />
@@ -93,7 +95,6 @@
     <Compile Include="MutliServiceAPI.cs" />
     <Compile Include="ReplayActiveMessageAPI.cs" />
     <Compile Include="ReplayPassiveMessageAPI.cs" />
-    <Compile Include="Helpers\TokenHelper.cs" />
     <Compile Include="Interface\IWeixinExecutor.cs" />
     <Compile Include="PromotionAPI.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -101,6 +102,7 @@
     <Compile Include="UserStatisticsAPI.cs" />
     <Compile Include="TemplateMessageAPI.cs" />
     <Compile Include="UserAdminAPI.cs" />
+    <Compile Include="MaterialAPI.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Cryptography\Readme.txt" />
